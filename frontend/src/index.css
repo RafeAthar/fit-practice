@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/* React Flow overrides */
+.react-flow__node {
+  transition: transform 0.15s ease-out;
+}
+
+.react-flow__edge-path {
+  stroke-width: 1.5;
+}
+
+/* Slide-in animation for confirmation modal */
+@keyframes slide-in-from-bottom-4 {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-in {
+  animation-fill-mode: both;
+}
+
+.slide-in-from-bottom-4 {
+  animation-name: slide-in-from-bottom-4;
+  animation-duration: 200ms;
+  animation-timing-function: ease-out;
+}
