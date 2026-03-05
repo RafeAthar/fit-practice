@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ReactFlow,
   Background,
@@ -22,11 +22,13 @@ import { LabeledEdge } from './edges/LabeledEdge';
 const nodeTypes = { mindmap: MindMapNodeComponent };
 const edgeTypes = { labeled: LabeledEdge };
 
-export function MindMapCanvas() {
-  const { graph, moveNode, loadGraph } = useGraphStore();
-  const { snapshot } = useHistoryStore();
+interface ContextMenu { x: number; y: number; canvasX: number; canvasY: number }
 
-  // Convert graph state to React Flow format
+export function MindMapCanvas() {
+  const { graph, moveNode, loadGraph, applyOperations } = useGraphStore();
+  const { snapshot } = useHistoryStore();
+  const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
+
   const rfNodes: Node[] = useMemo(
     () =>
       Object.values(graph.nodes).map((n) => ({
@@ -36,6 +38,7 @@ export function MindMapCanvas() {
         data: { label: n.label, nodeType: n.type, confidence: n.metadata.confidence },
         draggable: true,
       })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [graph.nodes, graph.version]
   );
 
@@ -49,27 +52,22 @@ export function MindMapCanvas() {
         label: e.label,
         animated: e.type === 'causal',
       })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [graph.edges, graph.version]
   );
 
   const onNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      const posChanges = changes.filter((c) => c.type === 'position' && c.dragging === false);
-      posChanges.forEach((c) => {
-        if (c.type === 'position' && c.position) {
-          moveNode(c.id, c.position);
-        }
+      changes.filter((c) => c.type === 'position' && c.dragging === false).forEach((c) => {
+        if (c.type === 'position' && c.position) moveNode(c.id, c.position);
       });
-      // For other changes (selection, etc.) apply normally via applyNodeChanges
       applyNodeChanges(changes, rfNodes);
     },
     [rfNodes, moveNode]
   );
 
   const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) => {
-      applyEdgeChanges(changes, rfEdges);
-    },
+    (changes: EdgeChange[]) => { applyEdgeChanges(changes, rfEdges); },
     [rfEdges]
   );
 
@@ -78,15 +76,29 @@ export function MindMapCanvas() {
     const positions = computeDagreLayout(graph);
     const updated = { ...graph, nodes: { ...graph.nodes } };
     Object.entries(positions).forEach(([id, pos]) => {
-      if (updated.nodes[id]) {
-        updated.nodes[id] = { ...updated.nodes[id], position: pos, isPositionedByUser: false };
-      }
+      if (updated.nodes[id]) updated.nodes[id] = { ...updated.nodes[id], position: pos, isPositionedByUser: false };
     });
     loadGraph(updated);
   }, [graph, snapshot, loadGraph]);
 
+  // Right-click on empty canvas → context menu
+  const onPaneContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setContextMenu({ x: e.clientX, y: e.clientY, canvasX: e.clientX - rect.left, canvasY: e.clientY - rect.top });
+  }, []);
+
+  const handleAddStandaloneNode = useCallback(() => {
+    setContextMenu(null);
+    const label = window.prompt('New node label:');
+    if (!label?.trim()) return;
+    snapshot(graph);
+    // Add as child of root — will get auto-laid-out
+    applyOperations([{ type: 'ADD_NODE', payload: { label: label.trim(), parentId: graph.rootNodeId, source: 'text' } }]);
+  }, [graph, snapshot, applyOperations]);
+
   return (
-    <div className="w-full h-full bg-gray-950">
+    <div className="w-full h-full bg-gray-950" onClick={() => setContextMenu(null)}>
       <ReactFlow
         nodes={rfNodes}
         edges={rfEdges}
@@ -94,6 +106,7 @@ export function MindMapCanvas() {
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onPaneContextMenu={onPaneContextMenu}
         fitView
         fitViewOptions={{ padding: 0.3 }}
         minZoom={0.2}
@@ -119,6 +132,24 @@ export function MindMapCanvas() {
       >
         Re-layout
       </button>
+
+      {/* Right-click context menu */}
+      {contextMenu && (
+        <div
+          className="absolute z-50 bg-gray-900 border border-gray-700 rounded-xl shadow-xl py-1 min-w-[160px]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={handleAddStandaloneNode}
+            className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-white/8 flex items-center gap-2 transition-colors"
+          >
+            <span className="text-emerald-400 text-base leading-none">+</span>
+            Add node here
+          </button>
+          <div className="text-[10px] text-gray-600 px-4 pb-1.5">connects to root by default</div>
+        </div>
+      )}
     </div>
   );
 }

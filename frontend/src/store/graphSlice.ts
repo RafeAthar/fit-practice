@@ -59,7 +59,9 @@ export const useGraphStore = create<GraphStore>((set) => ({
             const existing = n.label.toLowerCase().trim();
             const maxLen = Math.max(normLabel.length, existing.length);
             if (maxLen === 0) return false;
-            return (1 - levenshtein(normLabel, existing) / maxLen) >= 0.80;
+            // substring containment (e.g. "Creative Thinking" vs "Creative Thinking (book)")
+            if (normLabel.includes(existing) || existing.includes(normLabel)) return true;
+            return (1 - levenshtein(normLabel, existing) / maxLen) >= 0.75;
           });
           if (nearMatch) {
             newIdMap[`__NEW__:${label}`] = nearMatch.id;
@@ -67,7 +69,7 @@ export const useGraphStore = create<GraphStore>((set) => ({
           }
 
           const id = uuidv4();
-          const resolvedParentId = resolveId(parentId, newIdMap, graph);
+          const resolvedParentId = resolveId(parentId, newIdMap, graph) ?? graph.rootNodeId;
           newIdMap[`__NEW__:${label}`] = id;
 
           const position = placeNewNode(graph, resolvedParentId);

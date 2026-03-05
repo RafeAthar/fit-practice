@@ -9,7 +9,6 @@ interface MindMapNodeData {
   label: string;
   nodeType: NodeType;
   confidence?: number;
-  hasChildren?: boolean;
 }
 
 const TYPE_STYLES: Record<NodeType, string> = {
@@ -21,11 +20,7 @@ const TYPE_STYLES: Record<NodeType, string> = {
 };
 
 const TYPE_ICONS: Record<NodeType, string> = {
-  root: '◉',
-  topic: '◈',
-  idea: '◦',
-  question: '?',
-  action: '→',
+  root: '◉', topic: '◈', idea: '◦', question: '?', action: '→',
 };
 
 export function MindMapNodeComponent({ id, data }: NodeProps) {
@@ -41,20 +36,13 @@ export function MindMapNodeComponent({ id, data }: NodeProps) {
   const nodeType: NodeType = nodeData.nodeType ?? 'idea';
   const isRoot = nodeType === 'root';
   const isLowConfidence = (nodeData.confidence ?? 1) < 0.7;
-
-  // Determine if this node has children (to show warning on delete)
   const hasChildren = Object.values(graph.edges).some((e) => e.source === id);
 
-  const startEditing = () => {
-    setEditValue(nodeData.label);
-    setEditingNodeId(id);
-  };
+  const startEditing = () => { setEditValue(nodeData.label); setEditingNodeId(id); };
 
   const commitEdit = () => {
     const trimmed = editValue.trim();
-    if (trimmed && trimmed !== nodeData.label) {
-      updateNodeLabel(id, trimmed);
-    }
+    if (trimmed && trimmed !== nodeData.label) updateNodeLabel(id, trimmed);
     setEditingNodeId(null);
   };
 
@@ -75,9 +63,15 @@ export function MindMapNodeComponent({ id, data }: NodeProps) {
     applyOperations([{ type: 'DELETE_NODE', payload: { nodeId: id, deleteChildren: hasChildren } }]);
   };
 
-  useEffect(() => {
-    if (isEditing) inputRef.current?.focus();
-  }, [isEditing]);
+  const handleAddChild = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const label = window.prompt('New child node label:');
+    if (!label?.trim()) return;
+    snapshot(graph);
+    applyOperations([{ type: 'ADD_NODE', payload: { label: label.trim(), parentId: id, source: 'text' } }]);
+  };
+
+  useEffect(() => { if (isEditing) inputRef.current?.focus(); }, [isEditing]);
 
   return (
     <div
@@ -115,16 +109,29 @@ export function MindMapNodeComponent({ id, data }: NodeProps) {
         <span className="absolute -top-1.5 -right-1.5 text-[10px] bg-amber-500 text-black rounded-full px-1 leading-4">?</span>
       )}
 
-      {/* Delete button — shown on hover, hidden for root node */}
-      {hovered && !isRoot && !isEditing && (
-        <button
-          onClick={handleDelete}
-          onMouseDown={(e) => e.stopPropagation()}
-          className="absolute -top-2.5 -right-2.5 w-5 h-5 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center text-[11px] leading-none shadow-md transition-colors z-10"
-          title={hasChildren ? 'Delete node and children' : 'Delete node'}
-        >
-          ✕
-        </button>
+      {hovered && !isEditing && (
+        <>
+          {/* Delete button — top-right, hidden for root */}
+          {!isRoot && (
+            <button
+              onClick={handleDelete}
+              onMouseDown={(e) => e.stopPropagation()}
+              className="absolute -top-2.5 -right-2.5 w-5 h-5 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center text-[11px] leading-none shadow-md transition-colors z-10"
+              title={hasChildren ? 'Delete node and children' : 'Delete node'}
+            >
+              ✕
+            </button>
+          )}
+          {/* Add child button — bottom-right */}
+          <button
+            onClick={handleAddChild}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="absolute -bottom-2.5 -right-2.5 w-5 h-5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center text-[13px] leading-none shadow-md transition-colors z-10"
+            title="Add child node"
+          >
+            +
+          </button>
+        </>
       )}
 
       <Handle type="source" position={Position.Right} className="!w-2 !h-2 !bg-gray-500 !border-gray-400" />
