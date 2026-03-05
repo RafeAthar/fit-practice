@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
 import type { GraphState, MindMapNode, GraphOperation, NodeType, EdgeType } from '../types/graph';
-import { placeNewNode } from '../engine/layoutEngine';
+import { placeNewNode, computeDagreLayout } from '../engine/layoutEngine';
 
 const ROOT_ID = 'root';
 
@@ -38,16 +38,36 @@ export const useGraphStore = create<GraphStore>((set) => ({
   applyOperations: (ops) =>
     set((state) => {
       const graph = deepCloneGraph(state.graph);
-      // Map __NEW__:{label} sentinels to real UUIDs within this batch
       const newIdMap: Record<string, string> = {};
 
       for (const op of ops) {
         if (op.type === 'ADD_NODE') {
           const { label, nodeType = 'idea', parentId, relationship, confidence, source = 'ai-generated' } = op.payload;
+          const normLabel = label.toLowerCase().trim();
+
+          // Exact case-insensitive duplicate → reuse existing node
+          const exactMatch = Object.values(graph.nodes).find(
+            (n) => n.label.toLowerCase().trim() === normLabel
+          );
+          if (exactMatch) {
+            newIdMap[`__NEW__:${label}`] = exactMatch.id;
+            continue;
+          }
+
+          // Near-match (>=80% similarity) → reuse existing node
+          const nearMatch = Object.values(graph.nodes).find((n) => {
+            const existing = n.label.toLowerCase().trim();
+            const maxLen = Math.max(normLabel.length, existing.length);
+            if (maxLen === 0) return false;
+            return (1 - levenshtein(normLabel, existing) / maxLen) >= 0.80;
+          });
+          if (nearMatch) {
+            newIdMap[`__NEW__:${label}`] = nearMatch.id;
+            continue;
+          }
+
           const id = uuidv4();
           const resolvedParentId = resolveId(parentId, newIdMap, graph);
-
-          // Register sentinel if label matches __NEW__ pattern used as forward ref
           newIdMap[`__NEW__:${label}`] = id;
 
           const position = placeNewNode(graph, resolvedParentId);
@@ -60,7 +80,6 @@ export const useGraphStore = create<GraphStore>((set) => ({
             metadata: { createdAt: Date.now(), source, confidence, originalTranscript: undefined },
           };
 
-          // Auto-create hierarchical edge to parent
           if (resolvedParentId && graph.nodes[resolvedParentId]) {
             const edgeId = uuidv4();
             graph.edges[edgeId] = {
@@ -76,8 +95,13 @@ export const useGraphStore = create<GraphStore>((set) => ({
           const src = resolveId(sourceId, newIdMap, graph);
           const tgt = resolveId(targetId, newIdMap, graph);
           if (src && tgt && graph.nodes[src] && graph.nodes[tgt]) {
-            const edgeId = uuidv4();
-            graph.edges[edgeId] = { id: edgeId, source: src, target: tgt, label, type: edgeType as EdgeType };
+            const edgeExists = Object.values(graph.edges).some(
+              (e) => e.source === src && e.target === tgt
+            );
+            if (!edgeExists) {
+              const edgeId = uuidv4();
+              graph.edges[edgeId] = { id: edgeId, source: src, target: tgt, label, type: edgeType as EdgeType };
+            }
           }
         } else if (op.type === 'UPDATE_NODE') {
           const { nodeId, label, nodeType } = op.payload;
@@ -94,7 +118,6 @@ export const useGraphStore = create<GraphStore>((set) => ({
           if (deleteChildren) {
             deleteSubtree(graph, id);
           } else {
-            // Re-parent children to grandparent
             const parentEdge = Object.values(graph.edges).find((e) => e.target === id);
             const children = Object.values(graph.edges)
               .filter((e) => e.source === id)
@@ -111,6 +134,15 @@ export const useGraphStore = create<GraphStore>((set) => ({
       }
 
       graph.version++;
+
+      // Auto re-layout: reposition all non-user-dragged nodes via Dagre
+      const positions = computeDagreLayout(graph);
+      for (const [id, pos] of Object.entries(positions)) {
+        if (graph.nodes[id] && !graph.nodes[id].isPositionedByUser) {
+          graph.nodes[id].position = pos;
+        }
+      }
+
       saveToStorage(graph);
       return { graph };
     }),
@@ -177,6 +209,17 @@ function deleteSubtree(graph: GraphState, nodeId: string) {
   const children = Object.values(graph.edges).filter((e) => e.source === nodeId).map((e) => e.target);
   children.forEach((childId) => deleteSubtree(graph, childId));
   removeNode(graph, nodeId);
+}
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, (_, i) =>
+    Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+  );
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i - 1] === b[j - 1] ? dp[i - 1][j - 1] : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+  return dp[m][n];
 }
 
 const STORAGE_KEY = 'mindmap-graph';
