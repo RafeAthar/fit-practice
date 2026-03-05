@@ -42,33 +42,35 @@ export const useGraphStore = create<GraphStore>((set) => ({
 
       for (const op of ops) {
         if (op.type === 'ADD_NODE') {
-          const { label, nodeType = 'idea', parentId, relationship, confidence, source = 'ai-generated' } = op.payload;
+          const { id: suppliedId, label, nodeType = 'idea', parentId, relationship, confidence, source = 'ai-generated' } = op.payload;
           const normLabel = label.toLowerCase().trim();
 
-          // Exact case-insensitive duplicate → reuse existing node
-          const exactMatch = Object.values(graph.nodes).find(
-            (n) => n.label.toLowerCase().trim() === normLabel
-          );
-          if (exactMatch) {
-            newIdMap[`__NEW__:${label}`] = exactMatch.id;
-            continue;
+          // Skip dedup for manually-created placeholder nodes (empty label, pre-supplied id)
+          if (!suppliedId && normLabel) {
+            // Exact case-insensitive duplicate → reuse existing node
+            const exactMatch = Object.values(graph.nodes).find(
+              (n) => n.label.toLowerCase().trim() === normLabel
+            );
+            if (exactMatch) {
+              newIdMap[`__NEW__:${label}`] = exactMatch.id;
+              continue;
+            }
+
+            // Near-match: substring containment or >=75% fuzzy similarity
+            const nearMatch = Object.values(graph.nodes).find((n) => {
+              const existing = n.label.toLowerCase().trim();
+              const maxLen = Math.max(normLabel.length, existing.length);
+              if (maxLen < 3) return false;
+              if (normLabel.includes(existing) || existing.includes(normLabel)) return true;
+              return (1 - levenshtein(normLabel, existing) / maxLen) >= 0.75;
+            });
+            if (nearMatch) {
+              newIdMap[`__NEW__:${label}`] = nearMatch.id;
+              continue;
+            }
           }
 
-          // Near-match (>=80% similarity) → reuse existing node
-          const nearMatch = Object.values(graph.nodes).find((n) => {
-            const existing = n.label.toLowerCase().trim();
-            const maxLen = Math.max(normLabel.length, existing.length);
-            if (maxLen === 0) return false;
-            // substring containment (e.g. "Creative Thinking" vs "Creative Thinking (book)")
-            if (normLabel.includes(existing) || existing.includes(normLabel)) return true;
-            return (1 - levenshtein(normLabel, existing) / maxLen) >= 0.75;
-          });
-          if (nearMatch) {
-            newIdMap[`__NEW__:${label}`] = nearMatch.id;
-            continue;
-          }
-
-          const id = uuidv4();
+          const id = suppliedId ?? uuidv4();
           const resolvedParentId = resolveId(parentId, newIdMap, graph) ?? graph.rootNodeId;
           newIdMap[`__NEW__:${label}`] = id;
 

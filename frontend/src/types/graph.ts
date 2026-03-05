@@ -25,7 +25,7 @@ export interface MindMapEdge {
 }
 
 export type GraphOperation =
-  | { type: 'ADD_NODE'; payload: { label: string; nodeType?: NodeType; parentId?: string; relationship?: string; confidence?: number; source?: InputSource } }
+  | { type: 'ADD_NODE'; payload: { id?: string; label: string; nodeType?: NodeType; parentId?: string; relationship?: string; confidence?: number; source?: InputSource } }
   | { type: 'ADD_EDGE'; payload: { sourceId: string; targetId: string; label?: string; edgeType?: EdgeType } }
   | { type: 'UPDATE_NODE'; payload: { nodeId: string; label?: string; nodeType?: NodeType } }
   | { type: 'DELETE_NODE'; payload: { nodeId: string; deleteChildren: boolean } };
@@ -37,7 +37,6 @@ export interface GraphState {
   version: number;
 }
 
-// Pending ops awaiting user confirmation
 export interface PendingOperation {
   id: string;
   operation: GraphOperation;

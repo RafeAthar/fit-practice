@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import {
   ReactFlow,
   Background,
@@ -90,11 +91,10 @@ export function MindMapCanvas() {
 
   const handleAddStandaloneNode = useCallback(() => {
     setContextMenu(null);
-    const label = window.prompt('New node label:');
-    if (!label?.trim()) return;
+    const newId = uuidv4();
     snapshot(graph);
-    // Add as child of root — will get auto-laid-out
-    applyOperations([{ type: 'ADD_NODE', payload: { label: label.trim(), parentId: graph.rootNodeId, source: 'text' } }]);
+    // Create with empty label — node auto-enters edit mode on mount
+    applyOperations([{ type: 'ADD_NODE', payload: { id: newId, label: '', parentId: graph.rootNodeId, source: 'text' } }]);
   }, [graph, snapshot, applyOperations]);
 
   return (
