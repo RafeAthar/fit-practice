@@ -24,3 +24,14 @@
   animation-duration: 200ms;
   animation-timing-function: ease-out;
 }
+
+@keyframes slide-in-from-right-4 {
+  from { transform: translateX(16px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+.slide-in-from-right-4 {
+  animation-name: slide-in-from-right-4;
+  animation-duration: 180ms;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}

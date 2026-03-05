@@ -10,6 +10,11 @@ interface UIStore {
   aiThinking: string;
   pendingOps: PendingOperation[];
   editingNodeId: string | null;
+  // Search
+  isSearchOpen: boolean;
+  searchQuery: string;
+  // Notes panel
+  notesNodeId: string | null;
 
   setVoiceStatus: (s: VoiceStatus) => void;
   setInterimTranscript: (t: string) => void;
@@ -19,6 +24,9 @@ interface UIStore {
   confirmPendingOp: (id: string) => void;
   rejectPendingOp: (id: string) => void;
   setEditingNodeId: (id: string | null) => void;
+  setSearchOpen: (open: boolean) => void;
+  setSearchQuery: (q: string) => void;
+  setNotesNodeId: (id: string | null) => void;
 }
 
 export const useUIStore = create<UIStore>((set) => ({
@@ -28,15 +36,19 @@ export const useUIStore = create<UIStore>((set) => ({
   aiThinking: '',
   pendingOps: [],
   editingNodeId: null,
+  isSearchOpen: false,
+  searchQuery: '',
+  notesNodeId: null,
 
   setVoiceStatus: (voiceStatus) => set({ voiceStatus }),
   setInterimTranscript: (interimTranscript) => set({ interimTranscript }),
   setFinalTranscript: (finalTranscript) => set({ finalTranscript }),
   setAiThinking: (aiThinking) => set({ aiThinking }),
   setPendingOps: (pendingOps) => set({ pendingOps }),
-  confirmPendingOp: (id) =>
-    set((s) => ({ pendingOps: s.pendingOps.filter((p) => p.id !== id) })),
-  rejectPendingOp: (id) =>
-    set((s) => ({ pendingOps: s.pendingOps.filter((p) => p.id !== id) })),
+  confirmPendingOp: (id) => set((s) => ({ pendingOps: s.pendingOps.filter((p) => p.id !== id) })),
+  rejectPendingOp: (id) => set((s) => ({ pendingOps: s.pendingOps.filter((p) => p.id !== id) })),
   setEditingNodeId: (editingNodeId) => set({ editingNodeId }),
+  setSearchOpen: (isSearchOpen) => set({ isSearchOpen, searchQuery: isSearchOpen ? '' : '' }),
+  setSearchQuery: (searchQuery) => set({ searchQuery }),
+  setNotesNodeId: (notesNodeId) => set({ notesNodeId }),
 }));

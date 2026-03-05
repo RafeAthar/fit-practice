@@ -8,6 +8,9 @@ export interface MindMapNode {
   type: NodeType;
   position: { x: number; y: number };
   isPositionedByUser: boolean;
+  collapsed?: boolean;
+  color?: string;
+  notes?: string;
   metadata: {
     createdAt: number;
     source: InputSource;

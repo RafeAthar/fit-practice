@@ -238,3 +238,53 @@ function loadFromStorage(): GraphState | null {
     return raw ? JSON.parse(raw) : null;
   } catch { return null; }
 }
+
+// ---- Extra node actions (no Dagre re-layout) ----
+
+export const useNodeActions = () => {
+  const set = useGraphStore.setState;
+
+  const toggleCollapse = (nodeId: string) =>
+    set((state) => {
+      const graph = deepCloneGraph2(state.graph);
+      if (!graph.nodes[nodeId] || nodeId === graph.rootNodeId) return state;
+      graph.nodes[nodeId] = { ...graph.nodes[nodeId], collapsed: !graph.nodes[nodeId].collapsed };
+      graph.version++;
+      saveToStorage2(graph);
+      return { graph };
+    });
+
+  const setNodeColor = (nodeId: string, color: string | null) =>
+    set((state) => {
+      const graph = deepCloneGraph2(state.graph);
+      if (!graph.nodes[nodeId]) return state;
+      const node = { ...graph.nodes[nodeId] };
+      if (color) node.color = color; else delete node.color;
+      graph.nodes[nodeId] = node;
+      saveToStorage2(graph);
+      return { graph };
+    });
+
+  const updateNodeNotes = (nodeId: string, notes: string) =>
+    set((state) => {
+      const graph = deepCloneGraph2(state.graph);
+      if (!graph.nodes[nodeId]) return state;
+      graph.nodes[nodeId] = { ...graph.nodes[nodeId], notes };
+      saveToStorage2(graph);
+      return { graph };
+    });
+
+  return { toggleCollapse, setNodeColor, updateNodeNotes };
+};
+
+function deepCloneGraph2(g: import('../types/graph').GraphState): import('../types/graph').GraphState {
+  return {
+    nodes: Object.fromEntries(Object.entries(g.nodes).map(([k, v]) => [k, { ...v, metadata: { ...v.metadata }, position: { ...v.position } }])),
+    edges: Object.fromEntries(Object.entries(g.edges).map(([k, v]) => [k, { ...v }])),
+    rootNodeId: g.rootNodeId,
+    version: g.version,
+  };
+}
+function saveToStorage2(graph: import('../types/graph').GraphState) {
+  try { localStorage.setItem('mindmap-graph', JSON.stringify(graph)); } catch {}
+}
