@@ -2,12 +2,14 @@ import { useState, useRef, useEffect } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useUIStore } from '../../../store/uiSlice';
 import { useGraphStore } from '../../../store/graphSlice';
+import { useHistoryStore } from '../../../store/historySlice';
 import type { NodeType } from '../../../types/graph';
 
 interface MindMapNodeData {
   label: string;
   nodeType: NodeType;
   confidence?: number;
+  hasChildren?: boolean;
 }
 
 const TYPE_STYLES: Record<NodeType, string> = {
@@ -29,13 +31,19 @@ const TYPE_ICONS: Record<NodeType, string> = {
 export function MindMapNodeComponent({ id, data }: NodeProps) {
   const nodeData = data as unknown as MindMapNodeData;
   const { editingNodeId, setEditingNodeId } = useUIStore();
-  const { updateNodeLabel } = useGraphStore();
+  const { graph, updateNodeLabel, applyOperations } = useGraphStore();
+  const { snapshot } = useHistoryStore();
   const isEditing = editingNodeId === id;
   const [editValue, setEditValue] = useState('');
+  const [hovered, setHovered] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const nodeType: NodeType = nodeData.nodeType ?? 'idea';
+  const isRoot = nodeType === 'root';
   const isLowConfidence = (nodeData.confidence ?? 1) < 0.7;
+
+  // Determine if this node has children (to show warning on delete)
+  const hasChildren = Object.values(graph.edges).some((e) => e.source === id);
 
   const startEditing = () => {
     setEditValue(nodeData.label);
@@ -56,6 +64,17 @@ export function MindMapNodeComponent({ id, data }: NodeProps) {
     e.stopPropagation();
   };
 
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isRoot) return;
+    const confirmed = hasChildren
+      ? confirm(`Delete "${nodeData.label}" and all its children?`)
+      : true;
+    if (!confirmed) return;
+    snapshot(graph);
+    applyOperations([{ type: 'DELETE_NODE', payload: { nodeId: id, deleteChildren: hasChildren } }]);
+  };
+
   useEffect(() => {
     if (isEditing) inputRef.current?.focus();
   }, [isEditing]);
@@ -70,7 +89,9 @@ export function MindMapNodeComponent({ id, data }: NodeProps) {
         ${isLowConfidence ? 'opacity-60 border-dashed' : ''}
       `}
       onDoubleClick={startEditing}
-      title={isLowConfidence ? 'Low confidence — double-click to edit' : 'Double-click to edit'}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      title="Double-click to edit"
     >
       <Handle type="target" position={Position.Left} className="!w-2 !h-2 !bg-gray-500 !border-gray-400" />
 
@@ -92,6 +113,18 @@ export function MindMapNodeComponent({ id, data }: NodeProps) {
 
       {isLowConfidence && (
         <span className="absolute -top-1.5 -right-1.5 text-[10px] bg-amber-500 text-black rounded-full px-1 leading-4">?</span>
+      )}
+
+      {/* Delete button — shown on hover, hidden for root node */}
+      {hovered && !isRoot && !isEditing && (
+        <button
+          onClick={handleDelete}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="absolute -top-2.5 -right-2.5 w-5 h-5 rounded-full bg-red-600 hover:bg-red-500 text-white flex items-center justify-center text-[11px] leading-none shadow-md transition-colors z-10"
+          title={hasChildren ? 'Delete node and children' : 'Delete node'}
+        >
+          ✕
+        </button>
       )}
 
       <Handle type="source" position={Position.Right} className="!w-2 !h-2 !bg-gray-500 !border-gray-400" />
