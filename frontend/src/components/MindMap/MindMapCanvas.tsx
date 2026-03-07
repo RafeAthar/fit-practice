@@ -10,6 +10,7 @@ import {
   type Edge,
   type NodeChange,
   type EdgeChange,
+  type NodeDragHandler,
   applyNodeChanges,
   applyEdgeChanges,
 } from '@xyflow/react';
@@ -62,7 +63,7 @@ function descendantCount(graph: GraphState, nodeId: string): number {
 }
 
 export function MindMapCanvas() {
-  const { graph, moveNode, loadGraph, applyOperations } = useGraphStore();
+  const { graph, moveNode, reparentNode, loadGraph, applyOperations } = useGraphStore();
   const { snapshot } = useHistoryStore();
   const { searchQuery, isSearchActive } = { isSearchActive: useUIStore((s) => s.isSearchOpen && s.searchQuery.length > 0), searchQuery: useUIStore((s) => s.searchQuery) };
   const [contextMenu, setContextMenu] = useState<ContextMenu | null>(null);
@@ -127,6 +128,33 @@ export function MindMapCanvas() {
     [rfEdges]
   );
 
+  const REPARENT_DISTANCE = 80; // px proximity threshold
+
+  const onNodeDragStop: NodeDragHandler = useCallback((_event, draggedNode) => {
+    if (draggedNode.id === graph.rootNodeId) return;
+    // Find the closest other node within threshold
+    let closest: { id: string; dist: number } | null = null;
+    for (const n of Object.values(graph.nodes)) {
+      if (n.id === draggedNode.id || hiddenIds.has(n.id)) continue;
+      const dx = n.position.x - draggedNode.position.x;
+      const dy = n.position.y - draggedNode.position.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < REPARENT_DISTANCE && (!closest || dist < closest.dist)) {
+        closest = { id: n.id, dist };
+      }
+    }
+    if (closest) {
+      // Check if it's already the parent
+      const currentParentEdge = Object.values(graph.edges).find(
+        (e) => e.target === draggedNode.id && e.type === 'hierarchical'
+      );
+      if (currentParentEdge?.source !== closest.id) {
+        snapshot(graph);
+        reparentNode(draggedNode.id, closest.id);
+      }
+    }
+  }, [graph, hiddenIds, snapshot, reparentNode]);
+
   const handleRelayout = useCallback(() => {
     snapshot(graph);
     const positions = computeDagreLayout(graph);
@@ -159,6 +187,7 @@ export function MindMapCanvas() {
         edgeTypes={edgeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeDragStop={onNodeDragStop}
         onPaneContextMenu={onPaneContextMenu}
         fitView
         fitViewOptions={{ padding: 0.3 }}

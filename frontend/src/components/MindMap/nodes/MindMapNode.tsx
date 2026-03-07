@@ -124,7 +124,7 @@ export function MindMapNodeComponent({ id, data }: NodeProps) {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') { e.preventDefault(); commitEdit(); }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit(); }
     if (e.key === 'Escape') {
       if (isFreshNode) applyOperations([{ type: 'DELETE_NODE', payload: { nodeId: id, deleteChildren: false } }]);
       setEditingNodeId(null);

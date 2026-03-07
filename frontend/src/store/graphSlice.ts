@@ -28,6 +28,7 @@ interface GraphStore {
   applyOperations: (ops: GraphOperation[]) => void;
   updateNodeLabel: (nodeId: string, label: string) => void;
   moveNode: (nodeId: string, position: { x: number; y: number }) => void;
+  reparentNode: (nodeId: string, newParentId: string) => void;
   reset: (rootLabel?: string) => void;
   loadGraph: (state: GraphState) => void;
 }
@@ -167,6 +168,38 @@ export const useGraphStore = create<GraphStore>((set) => ({
       const graph = deepCloneGraph(state.graph);
       graph.nodes[nodeId].position = position;
       graph.nodes[nodeId].isPositionedByUser = true;
+      saveToStorage(graph);
+      return { graph };
+    }),
+
+  reparentNode: (nodeId, newParentId) =>
+    set((state) => {
+      if (!state.graph.nodes[nodeId] || !state.graph.nodes[newParentId]) return state;
+      if (nodeId === state.graph.rootNodeId || nodeId === newParentId) return state;
+      // Prevent reparenting to own descendant (would create cycle)
+      const isDescendant = (ancestor: string, target: string): boolean => {
+        for (const e of Object.values(state.graph.edges)) {
+          if (e.source === ancestor) {
+            if (e.target === target) return true;
+            if (isDescendant(e.target, target)) return true;
+          }
+        }
+        return false;
+      };
+      if (isDescendant(nodeId, newParentId)) return state;
+
+      const graph = deepCloneGraph(state.graph);
+      // Remove existing parent edge
+      for (const [eid, e] of Object.entries(graph.edges)) {
+        if (e.target === nodeId && e.type === 'hierarchical') {
+          delete graph.edges[eid];
+          break;
+        }
+      }
+      // Add new parent edge
+      const edgeId = uuidv4();
+      graph.edges[edgeId] = { id: edgeId, source: newParentId, target: nodeId, type: 'hierarchical' };
+      graph.version++;
       saveToStorage(graph);
       return { graph };
     }),
