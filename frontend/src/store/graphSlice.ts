@@ -57,13 +57,12 @@ export const useGraphStore = create<GraphStore>((set) => ({
               continue;
             }
 
-            // Near-match: substring containment or >=75% fuzzy similarity
+            // Near-match: >=80% fuzzy similarity only (no substring check — too aggressive)
             const nearMatch = Object.values(graph.nodes).find((n) => {
               const existing = n.label.toLowerCase().trim();
               const maxLen = Math.max(normLabel.length, existing.length);
               if (maxLen < 3) return false;
-              if (normLabel.includes(existing) || existing.includes(normLabel)) return true;
-              return (1 - levenshtein(normLabel, existing) / maxLen) >= 0.75;
+              return (1 - levenshtein(normLabel, existing) / maxLen) >= 0.80;
             });
             if (nearMatch) {
               newIdMap[`__NEW__:${label}`] = nearMatch.id;

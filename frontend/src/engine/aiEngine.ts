@@ -1,6 +1,6 @@
 import { SYSTEM_PROMPT, buildContextSnapshot, UPDATE_MIND_MAP_TOOL } from './prompts';
 import { resolveOperations } from './operationResolver';
-import type { GraphOperation, GraphState } from '../types/graph';
+import type { GraphState } from '../types/graph';
 
 interface AIEngineResult {
   ops: GraphOperation[];
@@ -93,13 +93,11 @@ Call update_mind_map with only ADD_NODE operations for the children.`;
   }
 
   const thinking = toolResult.thinking ?? '';
-  // Filter to ADD_NODE only and force parentId
-  const filteredOps = (toolResult.operations as GraphOperation[]).filter(
-    (op) => op.type === 'ADD_NODE'
-  ).map((op) => ({
-    ...op,
-    payload: { ...op.payload, parentId: op.payload.parentId || nodeId },
-  }));
+  // Filter to ADD_NODE only and force parentId (raw Claude objects — no .payload wrapper)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const filteredOps = (toolResult.operations as any[])
+    .filter((op) => op.type === 'ADD_NODE')
+    .map((op) => ({ ...op, parentId: op.parentId || nodeId }));
 
   const { ops, warnings } = resolveOperations(filteredOps, graph);
 
