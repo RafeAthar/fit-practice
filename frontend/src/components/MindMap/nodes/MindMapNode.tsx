@@ -5,6 +5,7 @@ import { useUIStore } from '../../../store/uiSlice';
 import { useGraphStore } from '../../../store/graphSlice';
 import { useNodeActions } from '../../../store/graphSlice';
 import { useHistoryStore } from '../../../store/historySlice';
+import { expandBranch } from '../../../engine/aiEngine';
 import type { NodeType } from '../../../types/graph';
 
 interface MindMapNodeData {
@@ -68,6 +69,7 @@ export function MindMapNodeComponent({ id, data }: NodeProps) {
   const [editValue, setEditValue] = useState('');
   const [hovered, setHovered] = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [isExpanding, setIsExpanding] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const colorPickerRef = useRef<HTMLDivElement>(null);
 
@@ -154,6 +156,22 @@ export function MindMapNodeComponent({ id, data }: NodeProps) {
     snapshot(graph);
     applyOperations([{ type: 'ADD_NODE', payload: { id: newId, label: '', parentId, source: 'text' } }]);
   }, [id, graph, snapshot, applyOperations]);
+
+  const handleAIExpand = useCallback(async () => {
+    if (isExpanding || !nodeData.label) return;
+    setIsExpanding(true);
+    try {
+      snapshot(graph);
+      const result = await expandBranch(id, nodeData.label, graph);
+      if (result.ops.length > 0) {
+        applyOperations(result.ops);
+      }
+    } catch (err) {
+      console.error('AI expand failed:', err);
+    } finally {
+      setIsExpanding(false);
+    }
+  }, [id, nodeData.label, graph, isExpanding, snapshot, applyOperations]);
 
   // Derive background: custom color overrides type default
   const bgStyle = nodeData.color
@@ -256,7 +274,24 @@ export function MindMapNodeComponent({ id, data }: NodeProps) {
             className="absolute -bottom-2.5 left-1 w-5 h-5 rounded-full bg-blue-700 hover:bg-blue-500 text-white flex items-center justify-center text-[10px] leading-none shadow-md transition-colors z-10"
             title="Edit notes"
           >≡</button>
+          {/* AI expand button */}
+          {!isFreshNode && (
+            <button
+              onClick={(e) => { e.stopPropagation(); handleAIExpand(); }}
+              onMouseDown={(e) => e.stopPropagation()}
+              disabled={isExpanding}
+              className="absolute -top-2.5 left-1 w-5 h-5 rounded-full bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white flex items-center justify-center text-[11px] leading-none shadow-md transition-colors z-10"
+              title="Let AI suggest children for this node"
+            >✦</button>
+          )}
         </>
+      )}
+
+      {/* AI expanding spinner overlay */}
+      {isExpanding && (
+        <div className="absolute inset-0 rounded-xl flex items-center justify-center bg-black/40 z-20 pointer-events-none">
+          <span className="text-violet-300 text-xs animate-pulse">AI…</span>
+        </div>
       )}
 
       {/* Color picker popover (right-click) */}
